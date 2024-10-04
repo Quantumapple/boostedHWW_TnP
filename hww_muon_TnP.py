@@ -1,7 +1,8 @@
 from coffea import processor
 import awkward as ak
 import numpy as np
-import hist
+import pandas as pd
+import sqlite3
 import warnings
 warnings.filterwarnings("ignore")
 
