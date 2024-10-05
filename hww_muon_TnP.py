@@ -299,11 +299,11 @@ class MuonTnpProcessor(processor.ProcessorABC):
         fail_mass = (no_fj_tag_leps[~pass_loc]+no_fj_probe_leps[~pass_loc]).mass
         pass_mass = (no_fj_tag_leps[pass_loc]+no_fj_probe_leps[pass_loc]).mass
 
-        nofj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_tag_leps[pass_loc]), ak.to_pandas(no_fj_probe_leps[pass_loc].pt)], axis=1)
+        nofj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_tag_leps[pass_loc].pt), ak.to_pandas(no_fj_probe_leps[pass_loc].pt)], axis=1)
         nofj_pass_df.reset_index(inplace=True)
         nofj_pass_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
-        nofj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_tag_leps[~pass_loc]), ak.to_pandas(no_fj_probe_leps[~pass_loc].pt)], axis=1)
+        nofj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_tag_leps[~pass_loc].pt), ak.to_pandas(no_fj_probe_leps[~pass_loc].pt)], axis=1)
         nofj_fail_df.reset_index(inplace=True)
         nofj_fail_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
@@ -321,12 +321,12 @@ class MuonTnpProcessor(processor.ProcessorABC):
         fail_mass = (fj_correlated_tag_leps[~pass_loc]+min_lep[~pass_loc]).mass
         pass_mass = (fj_correlated_tag_leps[pass_loc]+min_lep[pass_loc]).mass
 
-        wfj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_correlated_tag_leps[pass_loc]).pt, ak.to_pandas(min_lep[pass_loc].pt),
+        wfj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_correlated_tag_leps[pass_loc].pt), ak.to_pandas(min_lep[pass_loc].pt),
             ak.to_pandas(min_lep[pass_loc].delta_r(min_fj[pass_loc]))], axis=1)
         wfj_pass_df.reset_index(inplace=True)
         wfj_pass_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
 
-        wfj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_correlated_tag_leps[~pass_loc]).pt, ak.to_pandas(min_lep[~pass_loc].pt),
+        wfj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_correlated_tag_leps[~pass_loc].pt), ak.to_pandas(min_lep[~pass_loc].pt),
             ak.to_pandas(min_lep[~pass_loc].delta_r(min_fj[~pass_loc]))], axis=1)
         wfj_fail_df.reset_index(inplace=True)
         wfj_fail_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
@@ -346,11 +346,11 @@ class MuonTnpProcessor(processor.ProcessorABC):
             fail_mass = (ss_tag_leps[~pass_loc]+ss_probe_leps[~pass_loc]).mass
             pass_mass = (ss_tag_leps[pass_loc]+ss_probe_leps[pass_loc]).mass
 
-            inclusive_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(ss_tag_leps[pass_loc]), ak.to_pandas(ss_probe_leps[pass_loc].pt)], axis=1)
+            inclusive_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt)], axis=1)
             inclusive_pass_ss_df.reset_index(inplace=True)
             inclusive_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
-            inclusive_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(ss_tag_leps[~pass_loc]), ak.to_pandas(ss_probe_leps[~pass_loc].pt)], axis=1)
+            inclusive_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(ss_tag_leps[~pass_loc].pt), ak.to_pandas(ss_probe_leps[~pass_loc].pt)], axis=1)
             inclusive_fail_ss_df.reset_index(inplace=True)
             inclusive_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
@@ -370,11 +370,11 @@ class MuonTnpProcessor(processor.ProcessorABC):
             fail_mass = (no_fj_ss_tag_leps[~pass_loc]+no_fj_ss_probe_leps[~pass_loc]).mass
             pass_mass = (no_fj_ss_tag_leps[pass_loc]+no_fj_ss_probe_leps[pass_loc]).mass
 
-            nofj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_ss_tag_leps[pass_loc]), ak.to_pandas(no_fj_ss_probe_leps[pass_loc].pt)], axis=1)
+            nofj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_ss_tag_leps[pass_loc].pt), ak.to_pandas(no_fj_ss_probe_leps[pass_loc].pt)], axis=1)
             nofj_pass_ss_df.reset_index(inplace=True)
             nofj_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
-            nofj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_ss_tag_leps[~pass_loc]), ak.to_pandas(no_fj_ss_probe_leps[~pass_loc].pt)], axis=1)
+            nofj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_ss_tag_leps[~pass_loc].pt), ak.to_pandas(no_fj_ss_probe_leps[~pass_loc].pt)], axis=1)
             nofj_fail_ss_df.reset_index(inplace=True)
             nofj_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
 
@@ -390,12 +390,12 @@ class MuonTnpProcessor(processor.ProcessorABC):
             fail_mass = (fj_corr_ss_tag_leps[~pass_loc]+min_lep[~pass_loc]).mass
             pass_mass = (fj_corr_ss_tag_leps[pass_loc]+min_lep[pass_loc]).mass
 
-            wfj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_corr_ss_tag_leps[pass_loc]), ak.to_pandas(min_lep[pass_loc].pt),
+            wfj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_corr_ss_tag_leps[pass_loc].pt), ak.to_pandas(min_lep[pass_loc].pt),
                 ak.to_pandas(min_lep[pass_loc].delta_r(min_fj[pass_loc]))], axis=1)
             wfj_pass_ss_df.reset_index(inplace=True)
             wfj_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
 
-            wfj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_corr_ss_tag_leps[~pass_loc]), ak.to_pandas(min_lep[~pass_loc].pt),
+            wfj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_corr_ss_tag_leps[~pass_loc].pt), ak.to_pandas(min_lep[~pass_loc].pt),
                 ak.to_pandas(min_lep[~pass_loc].delta_r(min_fj[~pass_loc]))], axis=1)
             wfj_fail_ss_df.reset_index(inplace=True)
             wfj_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
