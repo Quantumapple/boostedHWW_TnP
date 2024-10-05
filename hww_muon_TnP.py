@@ -266,21 +266,12 @@ class MuonTnpProcessor(processor.ProcessorABC):
         #     probe_leps = good_TnP_events.probe_lep
         #     tag_leps = good_TnP_events.tag_lep
 
-        ### Inclusive
         pass_loc = _hww_muon_selections(probe_leps)
-        fail_mass = (tag_leps[~pass_loc]+probe_leps[~pass_loc]).mass
-        pass_mass = (tag_leps[pass_loc]+probe_leps[pass_loc]).mass
+        z_mass = (tag_leps+probe_leps).mass
 
-        inclusive_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(tag_leps[pass_loc].pt), ak.to_pandas(probe_leps[pass_loc].pt)], axis=1)
-        inclusive_pass_df.reset_index(inplace=True)
-        inclusive_pass_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-        inclusive_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(tag_leps[~pass_loc].pt), ak.to_pandas(probe_leps[~pass_loc].pt)], axis=1)
-        inclusive_fail_df.reset_index(inplace=True)
-        inclusive_fail_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-        ### Explicit delete variables, so it will not mix with other data
-        del pass_loc, fail_mass, pass_mass
+        df = pd.concat([ak.to_pandas(z_mass), ak.to_pandas(tag_leps.pt), ak.to_pandas(probe_leps.pt), ak.to_pandas(pass_loc)], axis=1)
+        df.reset_index(inplace=True)
+        df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
 
         ### Calculate delta R with AK8 fatjet for both tag and probe leptons
         ### Then use the fatjet with minimal Delta R with probe lepton
@@ -290,123 +281,62 @@ class MuonTnpProcessor(processor.ProcessorABC):
         fatjet = fatjet[fatjet_selector]
         has_good_fj = ak.num(fatjet) >= 1
 
-        ### No good AK8 jet
-        no_fj_tag_leps = tag_leps[~has_good_fj]
-        no_fj_probe_leps = probe_leps[~has_good_fj]
+        fj_df = ak.to_pandas(has_good_fj).reset_index()
+        fj_df.columns = ['entry', 'match_fj']
 
-        pass_loc = _hww_muon_selections(no_fj_probe_leps)
-
-        fail_mass = (no_fj_tag_leps[~pass_loc]+no_fj_probe_leps[~pass_loc]).mass
-        pass_mass = (no_fj_tag_leps[pass_loc]+no_fj_probe_leps[pass_loc]).mass
-
-        nofj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_tag_leps[pass_loc].pt), ak.to_pandas(no_fj_probe_leps[pass_loc].pt)], axis=1)
-        nofj_pass_df.reset_index(inplace=True)
-        nofj_pass_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-        nofj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_tag_leps[~pass_loc].pt), ak.to_pandas(no_fj_probe_leps[~pass_loc].pt)], axis=1)
-        nofj_fail_df.reset_index(inplace=True)
-        nofj_fail_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-        ### Explicit delete variables, so it will not mix with other data
-        del pass_loc, fail_mass, pass_mass
+        merged_df = df.merge(fj_df, left_on='evt', right_on='entry', how='left')
+        merged_df.drop(columns='entry', inplace=True)
+        del fj_df, df
 
         ### At least one good Ak8 jet
         fj_correlated_tag_leps = tag_leps[has_good_fj]
         fj_correlated_probe_leps = probe_leps[has_good_fj]
 
         min_lep, min_fj = find_minimum_dR(fj_correlated_probe_leps, fatjet[has_good_fj])
+        min_dr = ak.to_pandas(min_lep.delta_r(min_fj)).reset_index()['values'].values
 
-        pass_loc = _hww_muon_selections(min_lep)
-
-        fail_mass = (fj_correlated_tag_leps[~pass_loc]+min_lep[~pass_loc]).mass
-        pass_mass = (fj_correlated_tag_leps[pass_loc]+min_lep[pass_loc]).mass
-
-        wfj_pass_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_correlated_tag_leps[pass_loc].pt), ak.to_pandas(min_lep[pass_loc].pt),
-            ak.to_pandas(min_lep[pass_loc].delta_r(min_fj[pass_loc]))], axis=1)
-        wfj_pass_df.reset_index(inplace=True)
-        wfj_pass_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
-
-        wfj_fail_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_correlated_tag_leps[~pass_loc].pt), ak.to_pandas(min_lep[~pass_loc].pt),
-            ak.to_pandas(min_lep[~pass_loc].delta_r(min_fj[~pass_loc]))], axis=1)
-        wfj_fail_df.reset_index(inplace=True)
-        wfj_fail_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
+        filtered_df = merged_df.loc[merged_df['match_fj']]
+        filtered_df.loc[:, 'min_dr'] = min_dr
+        merged_df.loc[merged_df['match_fj'], 'min_dr'] = filtered_df['min_dr']
+        del filtered_df, min_dr
 
         outfile = f'{self._sqlite_output_name}.sqlite'
         with sqlite3.connect(outfile) as sqlconn:
-            inclusive_pass_df.to_sql('inclusive_pass', sqlconn, if_exists='append', index=False)
-            inclusive_fail_df.to_sql('inclusive_fail', sqlconn, if_exists='append', index=False)
-            nofj_pass_df.to_sql('nofj_pass', sqlconn, if_exists='append', index=False)
-            nofj_fail_df.to_sql('nofj_fail', sqlconn, if_exists='append', index=False)
-            wfj_pass_df.to_sql('wfj_pass', sqlconn, if_exists='append', index=False)
-            wfj_fail_df.to_sql('wfj_fail', sqlconn, if_exists='append', index=False)
+            merged_df.to_sql('signal', sqlconn, if_exists='append', index=False)
 
         if self._same_sign_bkg:
 
             pass_loc = _hww_muon_selections(ss_probe_leps)
-            fail_mass = (ss_tag_leps[~pass_loc]+ss_probe_leps[~pass_loc]).mass
-            pass_mass = (ss_tag_leps[pass_loc]+ss_probe_leps[pass_loc]).mass
+            not_z_mass = (ss_tag_leps+ss_probe_leps).mass
 
-            inclusive_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt)], axis=1)
-            inclusive_pass_ss_df.reset_index(inplace=True)
-            inclusive_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-            inclusive_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(ss_tag_leps[~pass_loc].pt), ak.to_pandas(ss_probe_leps[~pass_loc].pt)], axis=1)
-            inclusive_fail_ss_df.reset_index(inplace=True)
-            inclusive_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-            ### Explicit delete variables, so it will not mix with other data
-            del pass_loc, fail_mass, pass_mass
+            ss_df = pd.concat([ak.to_pandas(not_z_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt), ak.to_pandas(pass_loc)], axis=1)
+            ss_df.reset_index(inplace=True)
+            ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
 
             fatjet = good_events.FatJet[ss_loc]
             fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
             fatjet = fatjet[fatjet_selector]
             has_good_fj = ak.num(fatjet) >= 1
 
-            ### No good AK8 jet
-            no_fj_ss_tag_leps = ss_tag_leps[~has_good_fj]
-            no_fj_ss_probe_leps = ss_probe_leps[~has_good_fj]
+            fj_df = ak.to_pandas(has_good_fj).reset_index()
+            fj_df.columns = ['entry', 'match_fj']
 
-            pass_loc = _hww_muon_selections(no_fj_ss_probe_leps)
-            fail_mass = (no_fj_ss_tag_leps[~pass_loc]+no_fj_ss_probe_leps[~pass_loc]).mass
-            pass_mass = (no_fj_ss_tag_leps[pass_loc]+no_fj_ss_probe_leps[pass_loc]).mass
-
-            nofj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(no_fj_ss_tag_leps[pass_loc].pt), ak.to_pandas(no_fj_ss_probe_leps[pass_loc].pt)], axis=1)
-            nofj_pass_ss_df.reset_index(inplace=True)
-            nofj_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-            nofj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(no_fj_ss_tag_leps[~pass_loc].pt), ak.to_pandas(no_fj_ss_probe_leps[~pass_loc].pt)], axis=1)
-            nofj_fail_ss_df.reset_index(inplace=True)
-            nofj_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt']
-
-            ### Explicit delete variables, so it will not mix with other data
-            del pass_loc, fail_mass, pass_mass
+            merged_ss_df = ss_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
+            merged_ss_df.drop(columns='entry', inplace=True)
+            del fj_df, ss_df
 
             fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
             fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
 
             min_lep, min_fj = find_minimum_dR(fj_corr_ss_probe_leps, fatjet[has_good_fj])
 
-            pass_loc = _hww_muon_selections(min_lep)
-            fail_mass = (fj_corr_ss_tag_leps[~pass_loc]+min_lep[~pass_loc]).mass
-            pass_mass = (fj_corr_ss_tag_leps[pass_loc]+min_lep[pass_loc]).mass
-
-            wfj_pass_ss_df = pd.concat([ak.to_pandas(pass_mass), ak.to_pandas(fj_corr_ss_tag_leps[pass_loc].pt), ak.to_pandas(min_lep[pass_loc].pt),
-                ak.to_pandas(min_lep[pass_loc].delta_r(min_fj[pass_loc]))], axis=1)
-            wfj_pass_ss_df.reset_index(inplace=True)
-            wfj_pass_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
-
-            wfj_fail_ss_df = pd.concat([ak.to_pandas(fail_mass), ak.to_pandas(fj_corr_ss_tag_leps[~pass_loc].pt), ak.to_pandas(min_lep[~pass_loc].pt),
-                ak.to_pandas(min_lep[~pass_loc].delta_r(min_fj[~pass_loc]))], axis=1)
-            wfj_fail_ss_df.reset_index(inplace=True)
-            wfj_fail_ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'min_dr']
+            filtered_df = merged_ss_df.loc[merged_ss_df['match_fj']]
+            filtered_df.loc[:, 'min_dr'] = min_dr
+            merged_ss_df.loc[merged_ss_df['match_fj'], 'min_dr'] = filtered_df['min_dr']
+            del filtered_df, min_dr
 
             with sqlite3.connect(outfile) as sqlconn:
-                inclusive_pass_ss_df.to_sql('inclusive_pass_ss', sqlconn, if_exists='append', index=False)
-                inclusive_fail_ss_df.to_sql('inclusive_fail_ss', sqlconn, if_exists='append', index=False)
-                nofj_pass_ss_df.to_sql('nofj_pass_ss', sqlconn, if_exists='append', index=False)
-                nofj_fail_ss_df.to_sql('nofj_fail_ss', sqlconn, if_exists='append', index=False)
-                wfj_pass_ss_df.to_sql('wfj_pass_ss', sqlconn, if_exists='append', index=False)
-                wfj_fail_ss_df.to_sql('wfj_fail_ss', sqlconn, if_exists='append', index=False)
+                merged_ss_df.to_sql('same_sign_bkg', sqlconn, if_exists='append', index=False)
 
         return output
 
