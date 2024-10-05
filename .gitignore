@@ -1,0 +1,7 @@
+*.sh
+*.txt
+*.json
+*.sqlite
+*.ipynb
+condor*
+__pycache__
