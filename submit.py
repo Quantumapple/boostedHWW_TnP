@@ -48,15 +48,6 @@ def make_job(args):
         'output': '${2}',
     }
 
-    conditional_args = {
-        'same_sign_bkg': args.same_sign_bkg,
-        'full_mass_range_bkg': args.full_mass_range_bkg,
-    }
-
-    for arg, value in conditional_args.items():
-        if value:
-            bash_command += f" --{arg}"  # Add the argument if value is True
-
     # Define the bash script template
     bash_template = """#!/bin/bash
 
@@ -122,8 +113,6 @@ if __name__ == "__main__":
     parser.add_argument("--executor", dest="executor", default="futures", help="Coffea Executor. dask, futures", type=str)
     parser.add_argument("--input_json", dest="input_json", help="Input json file", type=str)
     parser.add_argument("--split", dest="split", default=30, help="number to split files per a single job", type=int)
-    parser.add_argument("--same_sign_bkg", dest="same_sign_bkg", action="store_true")
-    parser.add_argument("--full_mass_range_bkg", dest="full_mass_range_bkg", action="store_true")
     parser.add_argument("--dryrun", dest="dryrun", action="store_true")
 
     args = parser.parse_args()

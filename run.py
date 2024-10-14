@@ -47,7 +47,7 @@ def run_processor(args):
         else:
             executor = processor.IterativeExecutor(status=True)
 
-    proc = MuonTnpProcessor(year=args.year, channels=args.channel, sqlite_output_name=args.output, same_sign_bkg=args.same_sign_bkg, full_mass_bkg=args.full_mass_range_bkg)
+    proc = MuonTnpProcessor(year=args.year, channels=args.channel, sqlite_output_name=args.output)
 
     run = processor.Runner(
         executor=executor,
@@ -69,8 +69,6 @@ if __name__ == "__main__":
     parser.add_argument("--executor", dest="executor", default="futures", help="Coffea Executor. dask, futures", type=str)
     parser.add_argument("--input_json", dest="input_json", help="Input json file", type=str)
     parser.add_argument("--output", dest="output", default="outputs", help="Output file name", type=str)
-    parser.add_argument("--same_sign_bkg", dest="same_sign_bkg", action="store_true")
-    parser.add_argument("--full_mass_range_bkg", dest="full_mass_range_bkg", action="store_true")
     parser.add_argument("--local", dest="local", action="store_true")
 
     args = parser.parse_args()
