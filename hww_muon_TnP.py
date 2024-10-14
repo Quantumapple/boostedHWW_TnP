@@ -66,7 +66,6 @@ def _process_zcands_for_probes(
         abseta_tags,
         abseta_probes,
         same_sign_bkg: bool = False,
-        full_mass_range_bkg: bool = False,
     ):
     ## pT, eta, looseID selections
     pt_cond_tags = zcands.tag.pt > pt_tags
@@ -80,11 +79,12 @@ def _process_zcands_for_probes(
     ## Mass checking
     mass = (zcands.tag + zcands.probe).mass
     opposite_charge = zcands.tag.charge * zcands.probe.charge == -1
+    in_mass_window = (mass > 0)
 
-    if full_mass_range_bkg:
-        in_mass_window = (mass > 0)
-    else:
-        in_mass_window = (mass > 60) & (mass < 120)
+    # if full_mass_range_bkg:
+    #     in_mass_window = (mass > 0)
+    # else:
+    #     in_mass_window = (mass > 60) & (mass < 120)
 
     if same_sign_bkg:
         isZ = in_mass_window & ~opposite_charge
@@ -182,18 +182,16 @@ def _hww_muon_selections(
 
 
 class MuonTnpProcessor(processor.ProcessorABC):
-    def __init__(self, year='2018', channels='muon', sqlite_output_name='output', same_sign_bkg=False, full_mass_bkg=False):
+    def __init__(self, year='2018', channels='muon', sqlite_output_name='output'):
         self._year = year
         self._channels = channels
         self._sqlite_output_name = sqlite_output_name
-        self._same_sign_bkg = same_sign_bkg
-        self._full_mass_bkg = full_mass_bkg
 
     def process(self, events):
         dataset = events.metadata['dataset']
         output = {}
 
-        isData = not hasattr(events, "genWeight")
+        # isData = not hasattr(events, "genWeight")
         # if not isData:
         #     output['sumw'] = ak.sum(events.genWeight)
 
@@ -212,29 +210,28 @@ class MuonTnpProcessor(processor.ProcessorABC):
         ### Do not convolute pT dependence
 
         ### Method 1: Select pairs with the same sign
-        if self._same_sign_bkg:
-            ss_pairs, ss_events = _process_zcands_for_probes(
-                zcands=zcands,
-                good_events=good_events,
-                pt_tags=30.,
-                pt_probes=30.,
-                abseta_tags=2.4,
-                abseta_probes=2.4,
-                same_sign_bkg = True,
-            )
+        ss_pairs, ss_events = _process_zcands_for_probes(
+            zcands=zcands,
+            good_events=good_events,
+            pt_tags=30.,
+            pt_probes=30.,
+            abseta_tags=2.4,
+            abseta_probes=2.4,
+            same_sign_bkg = True,
+        )
 
-            ### Select good TnP events
-            ss_events, ss_loc = _process_zcands_for_tags(
-                zcands = ss_pairs,
-                good_events = ss_events,
-                lepton_id = 13,
-                trigger_obj_pt = 30.,
-                filter_bit = 1,
-            )
+        ### Select good TnP events
+        ss_events, ss_loc = _process_zcands_for_tags(
+            zcands = ss_pairs,
+            good_events = ss_events,
+            lepton_id = 13,
+            trigger_obj_pt = 30.,
+            filter_bit = 1,
+        )
 
-            ss_tag_leps, ss_probe_leps = ss_events.tag_lep, ss_events.probe_lep
-            ### This is necessary, if we want to select TnP pairs closest to Z boson mass
-            # ss_tag_leps, ss_probe_leps = find_TnP_closest_to_Z(ss_events)
+        ss_tag_leps, ss_probe_leps = ss_events.tag_lep, ss_events.probe_lep
+        ### This is necessary, if we want to select TnP pairs closest to Z boson mass
+        # ss_tag_leps, ss_probe_leps = find_TnP_closest_to_Z(ss_events)
 
         ### Method 2: use full mass range, control by input argument
         ### Select good probe events, pairs
@@ -245,7 +242,6 @@ class MuonTnpProcessor(processor.ProcessorABC):
             pt_probes=30.,
             abseta_tags=2.4,
             abseta_probes=2.4,
-            full_mass_range_bkg = self._full_mass_bkg,
         )
 
         ### Select good TnP events
@@ -282,7 +278,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         has_good_fj = ak.num(fatjet) >= 1
 
         fj_df = ak.to_pandas(has_good_fj).reset_index()
-        fj_df.columns = ['entry', 'match_fj']
+        fj_df.columns = ['entry', 'has_fj']
 
         merged_df = df.merge(fj_df, left_on='evt', right_on='entry', how='left')
         merged_df.drop(columns='entry', inplace=True)
@@ -295,48 +291,48 @@ class MuonTnpProcessor(processor.ProcessorABC):
         min_lep, min_fj = find_minimum_dR(fj_correlated_probe_leps, fatjet[has_good_fj])
         min_dr = ak.to_pandas(min_lep.delta_r(min_fj)).reset_index()['values'].values
 
-        filtered_df = merged_df.loc[merged_df['match_fj']]
+        filtered_df = merged_df.loc[merged_df['has_fj']]
         filtered_df.loc[:, 'min_dr'] = min_dr
-        merged_df.loc[merged_df['match_fj'], 'min_dr'] = filtered_df['min_dr']
+        merged_df.loc[merged_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
 
         outfile = f'{self._sqlite_output_name}.sqlite'
         with sqlite3.connect(outfile) as sqlconn:
             merged_df.to_sql('signal', sqlconn, if_exists='append', index=False)
 
-        if self._same_sign_bkg:
+        ### Same sign bkg
+        pass_loc = _hww_muon_selections(ss_probe_leps)
+        not_z_mass = (ss_tag_leps+ss_probe_leps).mass
 
-            pass_loc = _hww_muon_selections(ss_probe_leps)
-            not_z_mass = (ss_tag_leps+ss_probe_leps).mass
+        ss_df = pd.concat([ak.to_pandas(not_z_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt), ak.to_pandas(pass_loc)], axis=1)
+        ss_df.reset_index(inplace=True)
+        ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
 
-            ss_df = pd.concat([ak.to_pandas(not_z_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt), ak.to_pandas(pass_loc)], axis=1)
-            ss_df.reset_index(inplace=True)
-            ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
+        fatjet = good_events.FatJet[ss_loc]
+        fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
+        fatjet = fatjet[fatjet_selector]
+        has_good_fj = ak.num(fatjet) >= 1
 
-            fatjet = good_events.FatJet[ss_loc]
-            fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
-            fatjet = fatjet[fatjet_selector]
-            has_good_fj = ak.num(fatjet) >= 1
+        fj_df = ak.to_pandas(has_good_fj).reset_index()
+        fj_df.columns = ['entry', 'has_fj']
 
-            fj_df = ak.to_pandas(has_good_fj).reset_index()
-            fj_df.columns = ['entry', 'match_fj']
+        merged_ss_df = ss_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
+        merged_ss_df.drop(columns='entry', inplace=True)
+        del fj_df, ss_df
 
-            merged_ss_df = ss_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
-            merged_ss_df.drop(columns='entry', inplace=True)
-            del fj_df, ss_df
+        fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
+        fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
 
-            fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
-            fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
+        min_lep, min_fj = find_minimum_dR(fj_corr_ss_probe_leps, fatjet[has_good_fj])
+        min_dr = ak.to_pandas(min_lep.delta_r(min_fj)).reset_index()['values'].values
 
-            min_lep, min_fj = find_minimum_dR(fj_corr_ss_probe_leps, fatjet[has_good_fj])
+        filtered_df = merged_ss_df.loc[merged_ss_df['has_fj']]
+        filtered_df.loc[:, 'min_dr'] = min_dr
+        merged_ss_df.loc[merged_ss_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
+        del filtered_df, min_dr
 
-            filtered_df = merged_ss_df.loc[merged_ss_df['match_fj']]
-            filtered_df.loc[:, 'min_dr'] = min_dr
-            merged_ss_df.loc[merged_ss_df['match_fj'], 'min_dr'] = filtered_df['min_dr']
-            del filtered_df, min_dr
-
-            with sqlite3.connect(outfile) as sqlconn:
-                merged_ss_df.to_sql('same_sign_bkg', sqlconn, if_exists='append', index=False)
+        with sqlite3.connect(outfile) as sqlconn:
+            merged_ss_df.to_sql('same_sign_bkg', sqlconn, if_exists='append', index=False)
 
         return output
 
