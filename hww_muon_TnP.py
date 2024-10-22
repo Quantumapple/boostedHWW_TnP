@@ -265,9 +265,18 @@ class MuonTnpProcessor(processor.ProcessorABC):
         pass_loc = _hww_muon_selections(probe_leps)
         z_mass = (tag_leps+probe_leps).mass
 
-        df = pd.concat([ak.to_pandas(z_mass), ak.to_pandas(tag_leps.pt), ak.to_pandas(probe_leps.pt), ak.to_pandas(pass_loc)], axis=1)
+        df = pd.concat([ak.to_pandas(z_mass), ak.to_pandas(tag_leps.pt), ak.to_pandas(probe_leps.pt), ak.to_pandas(probe_leps.eta), ak.to_pandas(pass_loc)], axis=1)
         df.reset_index(inplace=True)
-        df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
+        df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'probe_eta', 'pass_hww']
+
+        ### MET
+        met = good_events.MET[good_TnP_loc]
+        met_df = ak.to_pandas(met.pt).reset_index()
+        met_df.columns = ['entry', 'met_pt']
+
+        step1_df = df.merge(met_df, left_on='evt', right_on='entry', how='left')
+        step1_df.drop(columns='entry', inplace=True)
+        del met_df, df
 
         ### Calculate delta R with AK8 fatjet for both tag and probe leptons
         ### Then use the fatjet with minimal Delta R with probe lepton
@@ -280,9 +289,9 @@ class MuonTnpProcessor(processor.ProcessorABC):
         fj_df = ak.to_pandas(has_good_fj).reset_index()
         fj_df.columns = ['entry', 'has_fj']
 
-        merged_df = df.merge(fj_df, left_on='evt', right_on='entry', how='left')
+        merged_df = step1_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
         merged_df.drop(columns='entry', inplace=True)
-        del fj_df, df
+        del fj_df, step1_df
 
         ### At least one good Ak8 jet
         fj_correlated_tag_leps = tag_leps[has_good_fj]
@@ -304,9 +313,18 @@ class MuonTnpProcessor(processor.ProcessorABC):
         pass_loc = _hww_muon_selections(ss_probe_leps)
         not_z_mass = (ss_tag_leps+ss_probe_leps).mass
 
-        ss_df = pd.concat([ak.to_pandas(not_z_mass), ak.to_pandas(ss_tag_leps[pass_loc].pt), ak.to_pandas(ss_probe_leps[pass_loc].pt), ak.to_pandas(pass_loc)], axis=1)
+        ss_df = pd.concat([ak.to_pandas(not_z_mass), ak.to_pandas(ss_tag_leps.pt), ak.to_pandas(ss_probe_leps.pt), ak.to_pandas(ss_probe_leps.eta), ak.to_pandas(pass_loc)], axis=1)
         ss_df.reset_index(inplace=True)
-        ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'pass_hww']
+        ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'probe_eta', 'pass_hww']
+
+        ### MET
+        met = good_events.MET[ss_loc]
+        met_df = ak.to_pandas(met.pt).reset_index()
+        met_df.columns = ['entry', 'met_pt']
+
+        ss_step1_df = ss_df.merge(met_df, left_on='evt', right_on='entry', how='left')
+        ss_step1_df.drop(columns='entry', inplace=True)
+        del met_df, ss_df
 
         fatjet = good_events.FatJet[ss_loc]
         fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
@@ -316,9 +334,9 @@ class MuonTnpProcessor(processor.ProcessorABC):
         fj_df = ak.to_pandas(has_good_fj).reset_index()
         fj_df.columns = ['entry', 'has_fj']
 
-        merged_ss_df = ss_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
+        merged_ss_df = ss_step1_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
         merged_ss_df.drop(columns='entry', inplace=True)
-        del fj_df, ss_df
+        del fj_df, ss_step1_df
 
         fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
         fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
