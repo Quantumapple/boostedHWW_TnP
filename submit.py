@@ -70,7 +70,8 @@ rm *.json
     with open('run_TnP.sh','w') as bashfile:
         bashfile.write(bash_script)
 
-    outdir = current_dir / 'histograms'
+    outname = args.input_json.split('.')[0]
+    outdir = current_dir / outname
     outdir.mkdir(exist_ok=True)
     jdl = """universe              = vanilla
 executable            = run_TnP.sh
