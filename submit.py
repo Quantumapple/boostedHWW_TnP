@@ -100,7 +100,7 @@ executable            = run_TnP.sh
 should_Transfer_Files = YES
 whenToTransferOutput  = ON_EXIT
 arguments             = $(ifile) $(name)
-transfer_Input_Files  = hww_muon_TnP.py,run.py,{2},{3}
+transfer_Input_Files  = hww_muon_TnP.py,run.py,corrections.py,{2},{3}
 TransferOutputRemaps = "$(name).sqlite={1}/$(name).sqlite"
 output                = {0}/$(ClusterId).$(ProcId).stdout
 error                 = {0}/$(ClusterId).$(ProcId).stderr
