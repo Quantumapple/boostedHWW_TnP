@@ -1,11 +1,19 @@
 from coffea import processor
 from coffea.lumi_tools import LumiMask
+from coffea.analysis_tools import Weights
 import awkward as ak
 import numpy as np
 import pandas as pd
 import sqlite3
 import warnings
 warnings.filterwarnings("ignore")
+
+from corrections import (
+    add_lepton_weight,
+    add_pileup_weight,
+    add_pileupid_weights,
+    add_VJets_kFactors,
+)
 
 ### Select events based on HLT and number of muon = 2 in the event
 def preSelect_Events(
@@ -44,7 +52,7 @@ def preSelect_Events(
         }
     }
 
-    met_filters = {
+    met_filters_dict = {
         # https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2
         '2016postVFP': [
                 'goodVertices',
@@ -94,8 +102,8 @@ def preSelect_Events(
     }
 
     lumiMasks = {
-        '2016postVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
         '2016preVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+        '2016postVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
         '2017': LumiMask("Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt"),
         '2018': LumiMask("Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt"),
     }
@@ -110,7 +118,7 @@ def preSelect_Events(
 
     # MET filters
     met_filters =  np.ones(nevents, dtype='bool')
-    for flag in met_filters[year]:
+    for flag in met_filters_dict[year]:
         met_filters = met_filters & events.Flag[flag]
 
     # Luminosity mask based on Golden Json
@@ -266,7 +274,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         #     output['sumw'] = ak.sum(events.genWeight)
 
         ### Preselection - HLT trigger
-        good_events, good_locations = preSelect_Events(events, self._year, self._channels)
+        good_events, _ = preSelect_Events(events, self._year, self._channels, isData)
 
         ### double, triple (and more) the number of TnP candidates (each item in the pair can be both a tag and a probe)
         ij = ak.argcartesian([good_events.Muon, good_events.Muon])
@@ -375,11 +383,46 @@ class MuonTnpProcessor(processor.ProcessorABC):
         merged_df.loc[merged_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
 
+        # OBJECT: AK4 jets for PU ID weights
+        jets = good_TnP_events.Jet
+
+        jet_selector = (
+            (jets.pt > 30)
+            & (abs(jets.eta) < 5.0)
+            & jets.isTight
+            & ((jets.pt >= 50) | ((jets.pt < 50) & (jets.puId & 2) == 2))
+        )
+        goodjets = jets[jet_selector]
+
+        ###########
+        ### Weights
+        ###########
+        if not isData:
+            weights = Weights(len(good_TnP_events), storeIndividual=True)
+            weights.add("genweight", good_TnP_events.genWeight)
+
+            if self._year in ("2016preVFP", "2016postVFP", "2017"):
+                weights.add("L1Prefiring", good_TnP_events.L1PreFiringWeight.Nom, good_TnP_events.L1PreFiringWeight.Up, good_TnP_events.L1PreFiringWeight.Dn)
+
+            add_pileup_weight(weights, self._year, nPU=ak.to_numpy(good_TnP_events.Pileup.nPU))
+            add_pileupid_weights(weights, goodjets, good_TnP_events.GenJet, wp="L")
+            add_lepton_weight(weights, probe_leps, self._year, "muon")
+
+            ewk_corr, qcd_corr, alt_qcd_corr = add_VJets_kFactors(weights, good_TnP_events.GenPart, dataset, good_TnP_events)
+            # # add corrections for plotting
+            # variables["weight_ewkcorr"] = ewk_corr
+            # variables["weight_qcdcorr"] = qcd_corr
+            # variables["weight_altqcdcorr"] = alt_qcd_corr
+
+            print(ak.to_pandas(weights.weight()))
+
         outfile = f'{self._sqlite_output_name}.sqlite'
         with sqlite3.connect(outfile) as sqlconn:
             merged_df.to_sql('signal', sqlconn, if_exists='append', index=False)
 
+        #################
         ### Same sign bkg
+        #################
         pass_loc = _hww_muon_selections(ss_probe_leps)
         not_z_mass = (ss_tag_leps+ss_probe_leps).mass
 
