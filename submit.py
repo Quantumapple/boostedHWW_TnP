@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--year", dest="year", default="2018", help="year", type=str)
+    parser.add_argument("--year", dest="year", default="2018", help="Argu: 2016preVFP, 2016postVFP, 2017, 2018", type=str)
     parser.add_argument("--channel", dest="channel", default="muon", help="Choose lepton, either muon or electron", type=str)
     parser.add_argument("--executor", dest="executor", default="futures", help="Coffea Executor. dask, futures", type=str)
     parser.add_argument("--input_json", dest="input_json", help="Input json file", type=str)
