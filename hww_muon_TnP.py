@@ -102,10 +102,10 @@ def preSelect_Events(
     }
 
     lumiMasks = {
-        '2016preVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
-        '2016postVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
-        '2017': LumiMask("Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt"),
-        '2018': LumiMask("Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt"),
+        '2016preVFP': LumiMask("utils/Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+        '2016postVFP': LumiMask("utils/Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+        '2017': LumiMask("utils/Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt"),
+        '2018': LumiMask("utils/Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt"),
     }
 
     nevents = len(events)
