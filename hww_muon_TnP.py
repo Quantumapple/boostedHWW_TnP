@@ -1,4 +1,5 @@
 from coffea import processor
+from coffea.lumi_tools import LumiMask
 import awkward as ak
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ def preSelect_Events(
     events,
     year: str,
     which_lepton: str,
+    isData: bool,
 ):
     """Preselect events by HLT trigger, ID, and number of leptons. ID selection is fixed to loose selection.
     events: NanoEventsFactory,
@@ -19,10 +21,16 @@ def preSelect_Events(
         Year.
     which_lepton: str,
         Select muon or electron to do TnP measurement.
+    isData: bool,
+        Flag to apply LumiMask on data
     """
 
     hlt_triggers = {
-        "2016": {
+        "2016postVFP": {
+            "muon": ["Mu50", "TkMu50", "IsoMu24", "IsoTkMu24"],
+            "electron": ["Ele27_WPTight_Gsf", "Ele115_CaloIdVT_GsfTrkIdT", "Photon175"],
+        },
+        "2016preVFP": {
             "muon": ["Mu50", "TkMu50", "IsoMu24", "IsoTkMu24"],
             "electron": ["Ele27_WPTight_Gsf", "Ele115_CaloIdVT_GsfTrkIdT", "Photon175"],
         },
@@ -36,6 +44,62 @@ def preSelect_Events(
         }
     }
 
+    met_filters = {
+        # https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2
+        '2016postVFP': [
+                'goodVertices',
+                'globalSuperTightHalo2016Filter',
+                'HBHENoiseFilter',
+                'HBHENoiseIsoFilter',
+                'EcalDeadCellTriggerPrimitiveFilter',
+                'BadPFMuonFilter',
+                'BadPFMuonDzFilter',
+                'eeBadScFilter'
+                ],
+
+        '2016preVFP': [
+                'goodVertices',
+                'globalSuperTightHalo2016Filter',
+                'HBHENoiseFilter',
+                'HBHENoiseIsoFilter',
+                'EcalDeadCellTriggerPrimitiveFilter',
+                'BadPFMuonFilter',
+                'BadPFMuonDzFilter',
+                'eeBadScFilter'
+                ],
+
+        '2017': [
+                'goodVertices',
+                'globalSuperTightHalo2016Filter',
+                'HBHENoiseFilter',
+                'HBHENoiseIsoFilter',
+                'EcalDeadCellTriggerPrimitiveFilter',
+                'BadPFMuonFilter',
+                'BadPFMuonDzFilter',
+                'eeBadScFilter',
+                'ecalBadCalibFilter'
+                ],
+
+        '2018': [
+                'goodVertices',
+                'globalSuperTightHalo2016Filter',
+                'HBHENoiseFilter',
+                'HBHENoiseIsoFilter',
+                'EcalDeadCellTriggerPrimitiveFilter',
+                'BadPFMuonFilter',
+                'BadPFMuonDzFilter',
+                'eeBadScFilter',
+                'ecalBadCalibFilter'
+                ]
+    }
+
+    lumiMasks = {
+        '2016postVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+        '2016preVFP': LumiMask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+        '2017': LumiMask("Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt"),
+        '2018': LumiMask("Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt"),
+    }
+
     nevents = len(events)
 
     # HLT trigger selection, logical OR
@@ -44,8 +108,19 @@ def preSelect_Events(
         if t in events.HLT.fields:
             pass_hlt = pass_hlt | events.HLT[t]
 
-    good_events = events[pass_hlt]
-    return good_events, pass_hlt
+    # MET filters
+    met_filters =  np.ones(nevents, dtype='bool')
+    for flag in met_filters[year]:
+        met_filters = met_filters & events.Flag[flag]
+
+    # Luminosity mask based on Golden Json
+    lumimask = np.ones(nevents, dtype='bool')
+    if isData:
+        lumimask = lumiMasks[year](events.run, events.luminosityBlock)
+
+    good_loc = pass_hlt & met_filters & lumimask
+    good_events = events[good_loc]
+    return good_events, good_loc
 
 def _trigger_match(tag_lepton, trigobjs, lepton_id, pt, filterbit):
     pass_pt = trigobjs.pt > pt
@@ -81,11 +156,6 @@ def _process_zcands_for_probes(
     opposite_charge = zcands.tag.charge * zcands.probe.charge == -1
     in_mass_window = (mass > 0)
 
-    # if full_mass_range_bkg:
-    #     in_mass_window = (mass > 0)
-    # else:
-    #     in_mass_window = (mass > 60) & (mass < 120)
-
     if same_sign_bkg:
         isZ = in_mass_window & ~opposite_charge
     else:
@@ -98,7 +168,7 @@ def _process_zcands_for_probes(
     dr_condition = dr > 0.0
     zcands = zcands[dr_condition]
 
-    ## Select the event when lepton pair 
+    ## Select the event when lepton pair
     has_pair = ak.num(zcands) >= 1
     zcands = zcands[has_pair]
     good_events = good_events[has_pair]
@@ -191,7 +261,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         dataset = events.metadata['dataset']
         output = {}
 
-        # isData = not hasattr(events, "genWeight")
+        isData = not hasattr(events, "genWeight")
         # if not isData:
         #     output['sumw'] = ak.sum(events.genWeight)
 
@@ -294,7 +364,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         del fj_df, step1_df
 
         ### At least one good Ak8 jet
-        fj_correlated_tag_leps = tag_leps[has_good_fj]
+        # fj_correlated_tag_leps = tag_leps[has_good_fj]
         fj_correlated_probe_leps = probe_leps[has_good_fj]
 
         min_lep, min_fj = find_minimum_dR(fj_correlated_probe_leps, fatjet[has_good_fj])
@@ -338,7 +408,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         merged_ss_df.drop(columns='entry', inplace=True)
         del fj_df, ss_step1_df
 
-        fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
+        # fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
         fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
 
         min_lep, min_fj = find_minimum_dR(fj_corr_ss_probe_leps, fatjet[has_good_fj])
