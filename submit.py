@@ -38,13 +38,14 @@ def make_job(args):
             listfile.write(save_string + '\n')
 
     #### Make python command
-    bash_command = "python run.py --year {{ year }} --channel {{ channel }} --executor {{ executor }} --input_json {{ input_json }} --output {{ output }}"
+    bash_command = "python run.py --year {{ year }} --channel {{ channel }} --executor {{ executor }} --input_json {{ input_json }} --golden_json {{ golden_json }} --output {{ output }}"
 
     options = {
         'year': args.year,
         'channel': args.channel,
         'executor': args.executor,
         'input_json': '${1}',
+        'golden_json': args.golden_json,
         'output': '${2}',
     }
 
@@ -78,14 +79,14 @@ executable            = run_TnP.sh
 should_Transfer_Files = YES
 whenToTransferOutput  = ON_EXIT
 arguments             = $(ifile) $(name)
-transfer_Input_Files  = hww_muon_TnP.py,run.py,{2}
+transfer_Input_Files  = hww_muon_TnP.py,run.py,{2},{3}
 TransferOutputRemaps = "$(name).sqlite={1}/$(name).sqlite"
 output                = {0}/$(ClusterId).$(ProcId).stdout
 error                 = {0}/$(ClusterId).$(ProcId).stderr
 log                   = {0}/$(ClusterId).$(ProcId).log
 +SingularityImage = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/coffeateam/coffea-base:0.7.21-py3.10"
 Queue ifile,name from input_list_for_condor.txt
-""".format(str(log_dir), str(outdir), str(json_dir))
+""".format(log_dir.name, outdir.name, json_dir.name, args.golden_json)
 
     with open(f'condor_TnP.jdl','w') as jdlfile:
         jdlfile.write(jdl)
@@ -113,6 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--channel", dest="channel", default="muon", help="Choose lepton, either muon or electron", type=str)
     parser.add_argument("--executor", dest="executor", default="futures", help="Coffea Executor. dask, futures", type=str)
     parser.add_argument("--input_json", dest="input_json", help="Input json file", type=str)
+    parser.add_argument("--golden_json", dest="golden_json", help="Input Golden json file", type=str)
     parser.add_argument("--split", dest="split", default=30, help="number to split files per a single job", type=int)
     parser.add_argument("--dryrun", dest="dryrun", action="store_true")
 
