@@ -221,10 +221,12 @@ lepton_corrections = {
 
 def add_lepton_weight(weights, lepton, year, lepton_type="muon"):
     ul_year = f"{year}_UL"
+
     if lepton_type == "electron":
         ul_year = ul_year.replace("_UL", "")
-
-    cset = correctionlib.CorrectionSet.from_file(get_pog_json(lepton_type, year))
+        cset = correctionlib.CorrectionSet.from_file('utils/electron.json.gz')
+    else:
+        cset = correctionlib.CorrectionSet.from_file('utils/muon_Z.json.gz')
 
     def set_isothreshold(corr, value, lepton_pt, lepton_type):
         """
