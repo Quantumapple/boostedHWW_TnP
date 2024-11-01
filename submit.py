@@ -4,6 +4,27 @@ import os
 from jinja2 import Template
 from pathlib import Path
 
+## CorrectionLib files are available from: /cvmfs/cms.cern.ch/rsync/cms-nanoAOD/jsonpog-integration - synced daily
+def copy_pog_json(year):
+
+    import shutil
+
+    pog_jsons = {
+        "muon": ["MUO", "muon_Z.json.gz"],
+        "electron": ["EGM", "electron.json.gz"],
+        "pileup": ["LUM", "puWeights.json.gz"],
+        "jec": ["JME", "fatJet_jerc.json.gz"],
+        "jmar": ["JME", "jmar.json.gz"],
+        "btagging": ["BTV", "btagging.json.gz"],
+    }
+
+    year_for_path = f"{year}_UL"
+    pog_correction_path = Path('/cvmfs/cms.cern.ch/rsync/cms-nanoAOD/jsonpog-integration')
+    dest_path = Path('./utils')
+    for key, val in pog_jsons.items():
+        src_path = pog_correction_path / 'POG' / val[0] / year_for_path / val[1]
+        shutil.copy(src_path, dest_path)
+
 def make_job(args):
     with open(f'{args.input_json}', 'r') as inputfile:
         fileset = json.load(inputfile)
@@ -130,4 +151,5 @@ if __name__ == "__main__":
         os.system('rm condor_logs/*stderr')
         os.system('ls condor_logs/*log | wc -l')
 
+    copy_pog_json(args.year)
     make_job(args)
