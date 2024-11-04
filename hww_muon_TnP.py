@@ -340,6 +340,44 @@ class MuonTnpProcessor(processor.ProcessorABC):
         #     probe_leps = good_TnP_events.probe_lep
         #     tag_leps = good_TnP_events.tag_lep
 
+        ### AK4 jets for PU ID weights and HEM cleaning
+        jets = good_TnP_events.Jet
+
+        jet_selector = (
+            (jets.pt > 30)
+            & (abs(jets.eta) < 5.0)
+            & jets.isTight
+            & ((jets.pt >= 50) | ((jets.pt < 50) & (jets.puId & 2) == 2))
+        )
+
+        good_jets = jets[jet_selector]
+
+        ### Electrons for HEM cleaning
+        electrons = good_TnP_events.Electron
+
+        # hem-cleaning selection
+        if self._year == "2018":
+            hem_veto = ak.any(
+                ((jets.eta > -3.2) & (jets.eta < -1.3) & (jets.phi > -1.57) & (jets.phi < -0.87)),
+                -1,
+            ) | ak.any(
+                (
+                    (electrons.pt > 30)
+                    & (electrons.eta > -3.2)
+                    & (electrons.eta < -1.3)
+                    & (electrons.phi > -1.57)
+                    & (electrons.phi < -0.87)
+                ),
+                -1,
+            )
+
+            hem_cleaning = (
+                ((events.run >= 319077) & (isData))  # if data check if in Runs C or D
+                # else for MC randomly cut based on lumi fraction of C&D
+                | ((np.random.rand(len(good_TnP_events)) < 0.632) & if is not isData)
+            ) & (hem_veto)
+
+
         pass_loc = _hww_muon_selections(probe_leps)
         z_mass = (tag_leps+probe_leps).mass
 
@@ -382,17 +420,6 @@ class MuonTnpProcessor(processor.ProcessorABC):
         filtered_df.loc[:, 'min_dr'] = min_dr
         merged_df.loc[merged_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
-
-        # OBJECT: AK4 jets for PU ID weights
-        jets = good_TnP_events.Jet
-
-        jet_selector = (
-            (jets.pt > 30)
-            & (abs(jets.eta) < 5.0)
-            & jets.isTight
-            & ((jets.pt >= 50) | ((jets.pt < 50) & (jets.puId & 2) == 2))
-        )
-        goodjets = jets[jet_selector]
 
         ###########
         ### Weights
