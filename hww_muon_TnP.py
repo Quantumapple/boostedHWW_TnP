@@ -474,7 +474,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
                 ) & (hem_veto)
 
         ss_step1_df = merge_to_pandas_df(ss_df, hem_cleaning, 'isHEM')
-        del df
+        del ss_df
 
         ### MET
         met = good_events.MET[ss_loc]
