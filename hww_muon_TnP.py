@@ -258,6 +258,16 @@ def _hww_muon_selections(
 
     return loc
 
+def merge_to_pandas_df(base_df, array_to_merge, column_title):
+
+    temp_df = ak.to_pandas(array_to_merge).reset_index()
+    temp_df.columns = ['entry', column_title]
+
+    merged_df = base_df.merge(temp_df, left_on='evt', right_on='entry', how='left')
+    merged_df.drop(columns='entry', inplace=True)
+    del temp_df
+
+    return merged_df
 
 class MuonTnpProcessor(processor.ProcessorABC):
     def __init__(self, year='2018', channels='muon', sqlite_output_name='output'):
@@ -288,7 +298,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         ### Do not convolute pT dependence
 
         ### Method 1: Select pairs with the same sign
-        ss_pairs, ss_events = _process_zcands_for_probes(
+        ss_pairs, ss_events_pre = _process_zcands_for_probes(
             zcands=zcands,
             good_events=good_events,
             pt_tags=30.,
@@ -301,7 +311,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         ### Select good TnP events
         ss_events, ss_loc = _process_zcands_for_tags(
             zcands = ss_pairs,
-            good_events = ss_events,
+            good_events = ss_events_pre,
             lepton_id = 13,
             trigger_obj_pt = 30.,
             filter_bit = 1,
@@ -342,15 +352,13 @@ class MuonTnpProcessor(processor.ProcessorABC):
 
         ### AK4 jets for PU ID weights and HEM cleaning
         jets = good_TnP_events.Jet
-
         jet_selector = (
             (jets.pt > 30)
             & (abs(jets.eta) < 5.0)
             & jets.isTight
             & ((jets.pt >= 50) | ((jets.pt < 50) & (jets.puId & 2) == 2))
         )
-
-        good_jets = jets[jet_selector]
+        jets = jets[jet_selector]
 
         ### Electrons for HEM cleaning
         electrons = good_TnP_events.Electron
@@ -372,9 +380,9 @@ class MuonTnpProcessor(processor.ProcessorABC):
             )
 
             hem_cleaning = (
-                ((events.run >= 319077) & (isData))  # if data check if in Runs C or D
+                ((good_TnP_events.run >= 319077) & (isData))  # if data check if in Runs C or D
                 # else for MC randomly cut based on lumi fraction of C&D
-                | ((np.random.rand(len(good_TnP_events)) < 0.632) & if is not isData)
+                | ((np.random.rand(len(good_TnP_events)) < 0.632) & (not isData))
             ) & (hem_veto)
 
 
@@ -385,29 +393,24 @@ class MuonTnpProcessor(processor.ProcessorABC):
         df.reset_index(inplace=True)
         df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'probe_eta', 'pass_hww']
 
-        ### MET
-        met = good_events.MET[good_TnP_loc]
-        met_df = ak.to_pandas(met.pt).reset_index()
-        met_df.columns = ['entry', 'met_pt']
+        step1_df = merge_to_pandas_df(df, hem_cleaning, 'isHEM')
+        del df
 
-        step1_df = df.merge(met_df, left_on='evt', right_on='entry', how='left')
-        step1_df.drop(columns='entry', inplace=True)
-        del met_df, df
+        ### MET
+        met = good_TnP_events.MET
+        step2_df = merge_to_pandas_df(step1_df, met.pt, 'met_pt')
+        del step1_df, met
 
         ### Calculate delta R with AK8 fatjet for both tag and probe leptons
         ### Then use the fatjet with minimal Delta R with probe lepton
         ### See the reference: https://github.com/jieunyoo/boostedhiggs_may27/blob/main/boostedhiggs/vhprocessor.py#L298-L300
-        fatjet = good_events.FatJet[good_TnP_loc]
+        fatjet = good_TnP_events.FatJet
         fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
         fatjet = fatjet[fatjet_selector]
         has_good_fj = ak.num(fatjet) >= 1
 
-        fj_df = ak.to_pandas(has_good_fj).reset_index()
-        fj_df.columns = ['entry', 'has_fj']
-
-        merged_df = step1_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
-        merged_df.drop(columns='entry', inplace=True)
-        del fj_df, step1_df
+        merged_df = merge_to_pandas_df(step2_df, has_good_fj, 'has_fj')
+        del step2_df
 
         ### At least one good Ak8 jet
         # fj_correlated_tag_leps = tag_leps[has_good_fj]
@@ -420,28 +423,6 @@ class MuonTnpProcessor(processor.ProcessorABC):
         filtered_df.loc[:, 'min_dr'] = min_dr
         merged_df.loc[merged_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
-
-        ###########
-        ### Weights
-        ###########
-        if not isData:
-            weights = Weights(len(good_TnP_events), storeIndividual=True)
-            weights.add("genweight", good_TnP_events.genWeight)
-
-            if self._year in ("2016preVFP", "2016postVFP", "2017"):
-                weights.add("L1Prefiring", good_TnP_events.L1PreFiringWeight.Nom, good_TnP_events.L1PreFiringWeight.Up, good_TnP_events.L1PreFiringWeight.Dn)
-
-            add_pileup_weight(weights, self._year, nPU=ak.to_numpy(good_TnP_events.Pileup.nPU))
-            add_pileupid_weights(weights, goodjets, good_TnP_events.GenJet, wp="L")
-            add_lepton_weight(weights, probe_leps, self._year, "muon")
-
-            ewk_corr, qcd_corr, alt_qcd_corr = add_VJets_kFactors(weights, good_TnP_events.GenPart, dataset, good_TnP_events)
-            # # add corrections for plotting
-            # variables["weight_ewkcorr"] = ewk_corr
-            # variables["weight_qcdcorr"] = qcd_corr
-            # variables["weight_altqcdcorr"] = alt_qcd_corr
-
-            print(ak.to_pandas(weights.weight()))
 
         outfile = f'{self._sqlite_output_name}.sqlite'
         with sqlite3.connect(outfile) as sqlconn:
@@ -457,26 +438,56 @@ class MuonTnpProcessor(processor.ProcessorABC):
         ss_df.reset_index(inplace=True)
         ss_df.columns = ['evt', 'identifier', 'mass', 'tag_pt', 'probe_pt', 'probe_eta', 'pass_hww']
 
+        ### AK4 jets for PU ID weights and HEM cleaning
+        jets = ss_events.Jet
+        jet_selector = (
+            (jets.pt > 30)
+            & (abs(jets.eta) < 5.0)
+            & jets.isTight
+            & ((jets.pt >= 50) | ((jets.pt < 50) & (jets.puId & 2) == 2))
+        )
+        jets = jets[jet_selector]
+
+        ### Electrons for HEM cleaning
+        electrons = ss_events.Electron
+
+        # hem-cleaning selection
+        if self._year == "2018":
+            hem_veto = ak.any(
+                ((jets.eta > -3.2) & (jets.eta < -1.3) & (jets.phi > -1.57) & (jets.phi < -0.87)),
+                -1,
+            ) | ak.any(
+                (
+                    (electrons.pt > 30)
+                    & (electrons.eta > -3.2)
+                    & (electrons.eta < -1.3)
+                    & (electrons.phi > -1.57)
+                    & (electrons.phi < -0.87)
+                ),
+                -1,
+            )
+
+            hem_cleaning = (
+                ((ss_events.run >= 319077) & (isData))  # if data check if in Runs C or D
+                # else for MC randomly cut based on lumi fraction of C&D
+                | ((np.random.rand(len(ss_events)) < 0.632) & (not isData))
+                ) & (hem_veto)
+
+        ss_step1_df = merge_to_pandas_df(ss_df, hem_cleaning, 'isHEM')
+        del df
+
         ### MET
         met = good_events.MET[ss_loc]
-        met_df = ak.to_pandas(met.pt).reset_index()
-        met_df.columns = ['entry', 'met_pt']
-
-        ss_step1_df = ss_df.merge(met_df, left_on='evt', right_on='entry', how='left')
-        ss_step1_df.drop(columns='entry', inplace=True)
-        del met_df, ss_df
+        ss_step2_df = merge_to_pandas_df(ss_step1_df, met.pt, 'met_pt')
+        del ss_step1_df, met
 
         fatjet = good_events.FatJet[ss_loc]
         fatjet_selector = (fatjet.pt > 200) & (abs(fatjet.eta) < 2.5) & fatjet.isTight
         fatjet = fatjet[fatjet_selector]
         has_good_fj = ak.num(fatjet) >= 1
 
-        fj_df = ak.to_pandas(has_good_fj).reset_index()
-        fj_df.columns = ['entry', 'has_fj']
-
-        merged_ss_df = ss_step1_df.merge(fj_df, left_on='evt', right_on='entry', how='left')
-        merged_ss_df.drop(columns='entry', inplace=True)
-        del fj_df, ss_step1_df
+        merged_ss_df = merge_to_pandas_df(ss_step2_df, has_good_fj, 'has_fj')
+        del ss_step2_df
 
         # fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
         fj_corr_ss_probe_leps = ss_probe_leps[has_good_fj]
@@ -491,6 +502,30 @@ class MuonTnpProcessor(processor.ProcessorABC):
 
         with sqlite3.connect(outfile) as sqlconn:
             merged_ss_df.to_sql('same_sign_bkg', sqlconn, if_exists='append', index=False)
+
+
+        ###########
+        ### Weights
+        ###########
+        # if not isData:
+        #     weights = Weights(len(good_TnP_events), storeIndividual=True)
+        #     weights.add("genweight", good_TnP_events.genWeight)
+
+        #     if self._year in ("2016preVFP", "2016postVFP", "2017"):
+        #         weights.add("L1Prefiring", good_TnP_events.L1PreFiringWeight.Nom, good_TnP_events.L1PreFiringWeight.Up, good_TnP_events.L1PreFiringWeight.Dn)
+
+        #     add_pileup_weight(weights, self._year, nPU=ak.to_numpy(good_TnP_events.Pileup.nPU))
+        #     add_pileupid_weights(weights, jets, good_TnP_events.GenJet, wp="L")
+        #     add_lepton_weight(weights, probe_leps, self._year, "muon")
+
+        #     ewk_corr, qcd_corr, alt_qcd_corr = add_VJets_kFactors(weights, good_TnP_events.GenPart, dataset, good_TnP_events)
+        #     # # add corrections for plotting
+        #     # variables["weight_ewkcorr"] = ewk_corr
+        #     # variables["weight_qcdcorr"] = qcd_corr
+        #     # variables["weight_altqcdcorr"] = alt_qcd_corr
+
+        #     print(ak.to_pandas(weights.weight()))
+
 
         return output
 
