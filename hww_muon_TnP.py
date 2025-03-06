@@ -414,6 +414,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         has_good_fj = ak.num(fatjet) >= 1
 
         merged_df = merge_to_pandas_df(step2_df, has_good_fj, 'has_fj')
+        merged_df = merge_to_pandas_df(merged_df, ak.num(fatjet), 'nfj')
         del step2_df
 
         ### At least one good Ak8 jet
@@ -494,6 +495,7 @@ class MuonTnpProcessor(processor.ProcessorABC):
         has_good_fj = ak.num(fatjet) >= 1
 
         merged_ss_df = merge_to_pandas_df(ss_step2_df, has_good_fj, 'has_fj')
+        merged_ss_df = merge_to_pandas_df(merged_ss_df, ak.num(fatjet), 'nfj')
         del ss_step2_df
 
         # fj_corr_ss_tag_leps = ss_tag_leps[has_good_fj]
