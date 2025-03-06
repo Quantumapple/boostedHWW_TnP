@@ -162,7 +162,8 @@ def _process_zcands_for_probes(
     ## Mass checking
     mass = (zcands.tag + zcands.probe).mass
     opposite_charge = zcands.tag.charge * zcands.probe.charge == -1
-    in_mass_window = (mass > 0)
+    # in_mass_window = (mass > 0)
+    in_mass_window = (mass > 60) & (mass < 120)
 
     if same_sign_bkg:
         isZ = in_mass_window & ~opposite_charge
@@ -252,7 +253,9 @@ def _hww_muon_selections(
     pt = (muons.pt > 30)
     eta = (np.abs(muons.eta) < 2.4)
     id_selection = muons.mediumId
-    isolation = (((muons.pfRelIso04_all < 0.20) & (muons.pt < 55)) | (muons.pt >= 55) & (muons.miniPFRelIso_all < 0.2))
+
+    #isolation_cut = 0.2
+    isolation = (((muons.pfRelIso04_all < 0.2) & (muons.pt < 55)) | (muons.pt >= 55) & (muons.miniPFRelIso_all < 0.2))
     vertex = (np.abs(muons.dz) < 0.1) & (np.abs(muons.dxy) < 0.02)
     loc = pt & eta & id_selection & isolation & vertex
 
