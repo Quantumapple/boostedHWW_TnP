@@ -273,10 +273,11 @@ def merge_to_pandas_df(base_df, array_to_merge, column_title):
     return merged_df
 
 class MuonTnpProcessor(processor.ProcessorABC):
-    def __init__(self, year='2018', channels='muon', sqlite_output_name='output'):
+    def __init__(self, year='2018', channels='muon', sqlite_output_name='output', met_cut=None):
         self._year = year
         self._channels = channels
         self._sqlite_output_name = sqlite_output_name
+        self._met_cut = met_cut
 
     def process(self, events):
         dataset = events.metadata['dataset']
@@ -427,6 +428,9 @@ class MuonTnpProcessor(processor.ProcessorABC):
         merged_df.loc[merged_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
 
+        if self._met_cut is not None:
+            merged_df = merged_df.loc[merged_df['met_pt'] < self._met_cut]
+
         outfile = f'{self._sqlite_output_name}.sqlite'
         with sqlite3.connect(outfile) as sqlconn:
             merged_df.to_sql('signal', sqlconn, if_exists='append', index=False)
@@ -502,6 +506,9 @@ class MuonTnpProcessor(processor.ProcessorABC):
         filtered_df.loc[:, 'min_dr'] = min_dr
         merged_ss_df.loc[merged_ss_df['has_fj'], 'min_dr'] = filtered_df['min_dr']
         del filtered_df, min_dr
+
+        if self._met_cut is not None:
+            merged_ss_df = merged_ss_df.loc[merged_ss_df['met_pt'] < self._met_cut]
 
         with sqlite3.connect(outfile) as sqlconn:
             merged_ss_df.to_sql('same_sign_bkg', sqlconn, if_exists='append', index=False)
