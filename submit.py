@@ -114,6 +114,8 @@ Queue ifile,name from input_list_for_condor.txt
     if args.dryrun:
         print('=========== Input text file ===========')
         os.system('cat input_list_for_condor.txt')
+        print('\nHow many jobs?')
+        os.system('cat input_list_for_condor.txt | wc -l')
         print()
         print('=========== Bash file ===========')
         os.system('cat run_TnP.sh')
